@@ -2,4 +2,4 @@
 
 ![jRange Preview](http://i.imgur.com/da8uZwx.png)
 
-[Demo and Documentation](http://nitinhayaran.github.io/jRange/demo/)
+[Demo and Documentation](https://github.com/larkwormzyn/jRange)
