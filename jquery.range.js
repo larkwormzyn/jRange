@@ -12,6 +12,9 @@
  * @author Nitin Hayaran
  * @version 0.1-RELEASE
  *
+ * Modified by zyn @20190419
+ *  + fix init value null bug
+ *  + add rangeCount property for multiple range support
  * Dependencies
  * ------------
  * jQuery (http://jquery.com)
@@ -26,27 +29,29 @@
 	};
 	jRange.prototype = {
 		defaults: {
+			from : 0,
+			to: 100,
 			onstatechange: function() {},
-      ondragend: function() {},
-      onbarclicked: function() {},
+			ondragend: function() {},
+			onbarclicked: function() {},
 			isRange: false,
 			showLabels: true,
 			showScale: true,
 			step: 1,
 			format: '%s',
-			theme: 'theme-green',
+			theme: 'theme-blue',
 			width: 300,
 			disable: false,
 			snap: false
 		},
 		template: '<div class="slider-container">\
 			<div class="back-bar">\
-                <div class="selected-bar"></div>\
-                <div class="pointer low"></div><div class="pointer-label low">123456</div>\
-                <div class="pointer high"></div><div class="pointer-label high">456789</div>\
-                <div class="clickable-dummy"></div>\
-            </div>\
-            <div class="scale"></div>\
+								<div class="selected-bar"></div>\
+								<div class="pointer low" labelIdx="low"></div><div class="pointer-label low">123456</div>\
+								<div class="pointer high" labelIdx="high"></div><div class="pointer-label high">456789</div>\
+								<div class="clickable-dummy"></div>\
+						</div>\
+						<div class="scale"></div>\
 		</div>',
 		init: function(node, options) {
 			this.options       = $.extend({}, this.defaults, options);
@@ -59,6 +64,7 @@
 			this.pointers      = $('.pointer', this.domNode);
 			this.lowPointer    = this.pointers.first();
 			this.highPointer   = this.pointers.last();
+			this.allPointers      = [this.lowPointer];
 			this.labels        = $('.pointer-label', this.domNode);
 			this.lowLabel      = this.labels.first();
 			this.highLabel     = this.labels.last();
@@ -66,6 +72,8 @@
 			this.bar           = $('.selected-bar', this.domNode);
 			this.clickableBar  = this.domNode.find('.clickable-dummy');
 			this.interval      = this.options.to - this.options.from;
+			this.reverse       = this.interval<0;
+			this.rangeCount    = this.options.rangeCount||1;
 			this.render();
 		},
 		render: function() {
@@ -82,6 +90,17 @@
 			if (this.isSingle()) {
 				this.lowPointer.hide();
 				this.lowLabel.hide();
+			} else{
+				for(var i=1; i<this.rangeCount; i++){
+					var mpt = $('<div class="pointer mid mid'+ i + '" labelIdx="mid' + i+ '"></div>');
+					var mptl = $('<div class="pointer-label mid mid' + i + '">888888</div>');
+			this.highPointer.before(mpt);
+			mpt.after(mptl);
+					this.allPointers[i] = mpt;
+				}
+				this.allPointers[this.allPointers.length] = this.highPointer;
+				this.pointers = $('.pointer', this.domNode);
+				this.labels = $('.pointer-label', this.domNode);
 			}
 			if (!this.options.showLabels) {
 				this.labels.hide();
@@ -137,7 +156,7 @@
 				.trigger('rangeslideend');
 			this.labels.removeClass('focused');
 			$(document).off('.slider');
-		  this.options.ondragend.call(this, this.options.value);
+			this.options.ondragend.call(this, this.options.value);
 		},
 		barClicked: function(e) {
 			if(this.options.disable) return;
@@ -145,19 +164,45 @@
 			if (this.isSingle())
 				this.setPosition(this.pointers.last(), x, true, true);
 			else {
-				var firstLeft      	= Math.abs(parseFloat(this.pointers.first().css('left'), 10)),
-						firstHalfWidth 	= this.pointers.first().width() / 2,
-						lastLeft 			 	= Math.abs(parseFloat(this.pointers.last().css('left'), 10)),
-						lastHalfWidth  	= this.pointers.first().width() / 2,
-						leftSide        = Math.abs(firstLeft - x + firstHalfWidth),
-						rightSide       = Math.abs(lastLeft - x + lastHalfWidth),
+				var firstLeft = Math.abs(parseFloat(this.lowPointer.css('left'), 10)),
+						lastLeft = Math.abs(parseFloat(this.highPointer.css('left'), 10)),
+						mid = firstLeft + (lastLeft - firstLeft) / 2,
 						pointer;
-
-				if(leftSide == rightSide) {
-					pointer = x < firstLeft ? this.pointers.first() : this.pointers.last();
-				} else {
-					pointer = leftSide < rightSide ? this.pointers.first() : this.pointers.last();
+				if (x <= firstLeft) {
+					pointer = this.lowPointer;
+				} else if (x >= lastLeft) {
+					pointer = this.highPointer;
+				} else if (this.rangeCount <= 1){
+					pointer = x > mid ? this.highPointer : this.lowPointer;
+				}else{
+					for (var i = 1, l = this.pointers.length; i < l; i++) {
+						var pt = this.pointers.eq(i);
+						var prevPt = i == 0 ? pt : this.pointers.eq(i - 1);
+						firstLeft = Math.abs(parseFloat(prevPt.css('left'), 10));
+						lastLeft = Math.abs(parseFloat(pt.css('left'), 10));
+						mid = firstLeft + (lastLeft - firstLeft) / 2;
+						if (x > firstLeft && x < lastLeft) {
+							pointer = x > mid ? pt : prevPt;
+							break;
+						}
+					}
 				}
+
+				// var firstLeft      	= Math.abs(parseFloat(this.pointers.first().css('left'), 10)),
+				// 		firstHalfWidth 	= this.pointers.first().width() / 2,
+				// 		lastLeft 			 	= Math.abs(parseFloat(this.pointers.last().css('left'), 10)),
+				// 		lastHalfWidth  	= this.pointers.first().width() / 2,
+				// 		leftSide        = Math.abs(firstLeft - x + firstHalfWidth),
+				// 		rightSide       = Math.abs(lastLeft - x + lastHalfWidth),
+				// 		pointer;
+				//
+				// if(leftSide == rightSide) {
+				// 	pointer = x < firstLeft ? this.pointers.first() : this.pointers.last();
+				// } else {
+				// 	pointer = leftSide < rightSide ? this.pointers.first() : this.pointers.last();
+				// }
+
+
 				this.setPosition(pointer, x, true, true);
 			}
 			this.options.onbarclicked.call(this, this.options.value);
@@ -168,18 +213,22 @@
 			max = self.domNode.width();
 
 			if (!self.isSingle()) {
-				min = pointer.hasClass('high') ? parseFloat(self.lowPointer.css("left")) + (self.lowPointer.width() / 2) : 0;
-				max = pointer.hasClass('low') ? parseFloat(self.highPointer.css("left")) + (self.highPointer.width() / 2) : self.domNode.width();
+				var prevPt = pointer.hasClass("low") ? self.lowPointer : pointer.prevAll(".pointer").first();
+				var nextPt = pointer.hasClass("high") ? self.highPointer : pointer.nextAll(".pointer").first();
+				min = pointer.hasClass('low') ? 0 : parseFloat(prevPt.css("left")) + (prevPt.width()/2);
+				max = pointer.hasClass('high') ? self.domNode.width(): parseFloat(nextPt.css("left")) + (nextPt.width()/2);
+
+				// min = pointer.hasClass('low') ? parseFloat(self.lowPointer.css("left")) + (self.lowPointer.width() / 2) : 0;
+				// max = pointer.hasClass('low') ? parseFloat(self.highPointer.css("left")) + (self.highPointer.width() / 2) : self.domNode.width();
 			}
 
 			var value = Math.min(Math.max(position, min), max);
 			self.setPosition(pointer, value, true);
 		},
 		setPosition: function(pointer, position, isPx, animate) {
-			var leftPos, rightPos,
-				lowPos = parseFloat(this.lowPointer.css("left")),
-				highPos = parseFloat(this.highPointer.css("left")) || 0,
-				circleWidth = this.highPointer.width() / 2;
+			var lowPos = parseFloat(this.lowPointer.css("left"))||0;
+			var highPos = parseFloat(this.highPointer.css("left"))||0;
+			var circleWidth = this.highPointer.width() / 2;
 			if (!isPx) {
 				position = this.prcToPx(position);
 			}
@@ -193,23 +242,19 @@
 			}
 			if (pointer[0] === this.highPointer[0]) {
 				highPos = Math.round(position - circleWidth);
-			} else {
+			} else if(pointer[0] === this.lowPointer[0]) {
 				lowPos = Math.round(position - circleWidth);
 			}
 			pointer[animate ? 'animate' : 'css']({
 				'left': Math.round(position - circleWidth)
 			});
-			if (this.isSingle()) {
-				leftPos = 0;
-			} else {
-				leftPos = lowPos + circleWidth;
-				rightPos = highPos + circleWidth;
-			}
-			var w = Math.round(highPos + circleWidth - leftPos);
+
+			var w = Math.round(highPos - lowPos);
 			this.bar[animate ? 'animate' : 'css']({
 				'width': Math.abs(w),
-				'left': (w>0) ? leftPos : leftPos + w
+				'left': this.isSingle() ? 0 : lowPos
 			});
+
 			this.showPointerValue(pointer, position, animate);
 			this.isReadonly();
 		},
@@ -226,17 +271,40 @@
 		// will be called from outside
 		setValue: function(value) {
 			var values = value.toString().split(',');
-			values[0] = Math.min(Math.max(values[0], this.options.from), this.options.to) + '';
-			if (values.length > 1){
-				values[1] = Math.min(Math.max(values[1], this.options.from), this.options.to) + '';
+			values[0] = parseFloat(values[0]);
+			values[0] = isNaN(values[0]) ? this.options.from : values[0];
+			if(this.reverse)
+				values[0] = Math.max(Math.min(values[0], this.options.from), this.options.to) + '';
+			else
+				values[0] = Math.min(Math.max(values[0], this.options.from), this.options.to) + '';
+			if(this.rangeCount>1){
+				for(var i=1; i<=this.rangeCount; i++){
+					values[i] = parseFloat(values[i]);
+					values[i] = isNaN(values[i]) ? values[i-1] : values[i];
+					if(this.reverse)
+						values[i] = Math.max(Math.min(values[i], values[i-1]), this.options.to) + '';
+					else
+						values[i] = Math.min(Math.max(values[i], values[i-1]), this.options.to) + '';
+				}
+			}else {
+				if (values.length > 1) {
+					values[1] = parseFloat(values[1]);
+					values[1] = isNaN(values[1]) ? this.options.to : values[1];
+					if(this.reverse)
+						values[1] = Math.max(Math.min(values[1], this.options.from), this.options.to) + '';
+					else
+						values[1] = Math.min(Math.max(values[1], this.options.from), this.options.to) + '';
+				}
 			}
 			this.options.value = value;
-			var prc = this.valuesToPrc(values.length === 2 ? values : [0, values[0]]);
+			var prc = this.valuesToPrc(values.length >= 2 ? values : [0, values[0]]);
 			if (this.isSingle()) {
 				this.setPosition(this.highPointer, prc[1]);
 			} else {
 				this.setPosition(this.lowPointer, prc[0]);
-				this.setPosition(this.highPointer, prc[1]);
+				for(var i=1; i<=this.rangeCount; i++) {
+					this.setPosition(this.allPointers[i], prc[i]);
+				}
 			}
 		},
 		renderScale: function() {
@@ -263,7 +331,7 @@
 			}
 		},
 		showPointerValue: function(pointer, position, animate) {
-			var label = $('.pointer-label', this.domNode)[pointer.hasClass('low') ? 'first' : 'last']();
+			var label = $('.pointer-label', this.domNode).filter("." + pointer.attr("labelIdx"));
 			var text;
 			var value = this.positionToValue(position);
 			// Is it higer or lower than it should be?
@@ -284,9 +352,12 @@
 			this.setInputValue(pointer, value);
 		},
 		valuesToPrc: function(values) {
-			var lowPrc = ((parseFloat(values[0]) - parseFloat(this.options.from)) * 100 / this.interval),
-				highPrc = ((parseFloat(values[1]) - parseFloat(this.options.from)) * 100 / this.interval);
-			return [lowPrc, highPrc];
+			var lowPrc = ((parseFloat(values[0]) - parseFloat(this.options.from)) * 100 / this.interval);
+			var ret = [lowPrc];
+			for(var i=1; i<=this.rangeCount; i++) {
+				ret[i] = ((parseFloat(values[i]) - parseFloat(this.options.from)) * 100 / this.interval);
+			}
+			return ret;
 		},
 		prcToPx: function(prc) {
 			return (this.domNode.width() * prc) / 100;
@@ -298,19 +369,19 @@
 			var value = (pos / this.domNode.width()) * this.interval;
 			value = parseFloat(value, 10) + parseFloat(this.options.from, 10);
 			if (this.isDecimal()) {
-				var final = Math.round(Math.round(value / this.options.step) * this.options.step *100)/100;
-				if (final!==0.0) {
-					final = '' + final;
-					if (final.indexOf(".")===-1) {
-						final = final + ".";
+				var f = Math.round(Math.round(value / this.options.step) * this.options.step *100)/100;
+				if (f!==0.0) {
+					f = '' + f;
+					if (f.indexOf(".")===-1) {
+						f = f + ".";
 					}
-					while (final.length - final.indexOf('.')<3) {
-						final = final + "0";
+					while (f.length - f.indexOf('.')<3) {
+						f = f + "0";
 					}
 				} else {
-					final = "0.00";
+					f = "0.00";
 				}
-				return final;
+				return f;
 			} else {
 				return Math.round(value / this.options.step) * this.options.step;
 			}
@@ -321,15 +392,16 @@
 				this.options.value = v.toString();
 			} else {
 				var values = this.options.value.split(',');
-				if (pointer.hasClass('low')) {
-					this.options.value = v + ',' + values[1];
-				} else {
-					this.options.value = values[0] + ',' + v;
+				for(var i in this.allPointers){
+					if(this.allPointers[i][0]===pointer[0]){
+						values[i] = v.toString();
+						break;
+					}
 				}
+				this.options.value = values.join(",");
 			}
 			if (this.inputNode.val() !== this.options.value) {
-				this.inputNode.val(this.options.value)
-					.trigger('change');
+				this.inputNode.val(this.options.value).trigger('change');
 				this.options.onstatechange.call(this, this.options.value);
 			}
 		},
@@ -359,7 +431,9 @@
 		},
 		updateRange: function(range, value) {
 			var values = range.toString().split(',');
-			this.interval = parseInt(values[1]) - parseInt(values[0]);
+			this.options.from = parseInt(values[0]);
+			this.options.to = parseInt(values[1]);
+			this.interval = this.options.to - this.options.from;
 			if(value){
 				this.setValue(value);
 			}else{
